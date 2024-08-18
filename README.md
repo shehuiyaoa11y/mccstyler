@@ -27,7 +27,7 @@ pip install -r requirements.txt
 ```
 
 ## Pretrained models
-[CC12M_cfg](https://the-eye.eu/public/AI/models/v-diffusion/cc12m_1_cfg.pth), [WikiArt](https://the-eye.eu/public/AI/models/v-diffusion/wikiart_256.pth)
+[CC12M_cfg](https://the-eye.eu/public/AI/models/v-diffusion/cc12m_1_cfg.pth)
 <br> Please download them and put them into the floder ./checkpoints/ <br> 
 
 ## Run
