@@ -1,9 +1,9 @@
 # Multi-channel Correlated Diffusion for Text-Driven Artistic Style Transfer
 Multi-channel Correlated Diffusion for Text-Driven Artistic Style Transfer
 
-## Official Pytorch implementation of ["Multi-channel Correlated Diffusion for Text-Driven Artistic Style Transfer"](https://arxiv.org/abs/2211.10682)
+## Official Pytorch implementation of ["Multi-channel Correlated Diffusion for Text-Driven Artistic Style Transfer"]
 
-[Project Page(https://arxiv.org/abs/2211.10682)]
+
 
 ![MAIN3_e2-min](https://github.com/haha-lisa/Diffstyler/blob/main/figure/teaser2.jpg)
 
