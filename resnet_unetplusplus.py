@@ -1,0 +1,242 @@
+import torch
+from torch import nn
+
+
+def calc_mean_std(feat, eps=1e-5):
+    # eps is a small value added to the variance to avoid divide-by-zero.
+    size = feat.size()
+    assert (len(size) == 4)
+    N, C = size[:2]
+    feat_var = feat.view(N, C, -1).var(dim=2) + eps
+    feat_std = feat_var.sqrt().view(N, C, 1, 1)
+    feat_mean = feat.view(N, C, -1).mean(dim=2).view(N, C, 1, 1)
+    return feat_mean, feat_std
+
+
+def normal(feat, eps=1e-5):
+    feat_mean, feat_std = calc_mean_std(feat, eps)
+    normalized = (feat - feat_mean) / feat_std
+    return normalized
+
+class VGGBlock(nn.Module):
+    def __init__(self, in_channels, middle_channels, out_channels):
+        super().__init__()
+        self.first = nn.Sequential(
+            nn.Conv2d(in_channels, middle_channels, 3, padding=1, bias=False),
+            nn.InstanceNorm2d(middle_channels),
+            nn.ReLU(inplace=True)
+        )
+        self.second = nn.Sequential(
+            nn.Conv2d(middle_channels, out_channels, 3, padding=1, bias=False),
+            nn.InstanceNorm2d(out_channels),
+            nn.ReLU(inplace=True)
+        )
+
+    def forward(self, x):
+        out = self.first(x)
+        out = self.second(out)
+
+        return out
+
+
+class BasicBlock(nn.Module):
+    expansion = 1
+
+    def __init__(self, in_channels, out_channels, stride=1):
+        super().__init__()
+
+        self.residual_function = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, bias=False),
+            nn.InstanceNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels * BasicBlock.expansion, kernel_size=3, padding=1, bias=False),
+            nn.InstanceNorm2d(out_channels * BasicBlock.expansion)
+        )
+
+        self.shortcut = nn.Sequential()
+
+        if stride != 1 or in_channels != BasicBlock.expansion * out_channels:
+            self.shortcut = nn.Sequential(
+                nn.Conv2d(in_channels, out_channels * BasicBlock.expansion, kernel_size=1, stride=stride, bias=False),
+                nn.InstanceNorm2d(out_channels * BasicBlock.expansion)
+            )
+
+    def forward(self, x):
+        return nn.ReLU(inplace=True)(self.residual_function(x) + self.shortcut(x))
+
+
+class BottleNeck(nn.Module):
+    expansion = 4
+
+    def __init__(self, in_channels, out_channels, stride=1):
+        super().__init__()
+        self.residual_function = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False),
+            nn.InstanceNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels, stride=stride, kernel_size=3, padding=1, bias=False),
+            nn.InstanceNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels * BottleNeck.expansion, kernel_size=1, bias=False),
+            nn.InstanceNorm2d(out_channels * BottleNeck.expansion),
+        )
+
+        self.shortcut = nn.Sequential()
+
+        if stride != 1 or in_channels != out_channels * BottleNeck.expansion:
+            self.shortcut = nn.Sequential(
+                nn.Conv2d(in_channels, out_channels * BottleNeck.expansion, stride=stride, kernel_size=1, bias=False),
+                nn.InstanceNorm2d(out_channels * BottleNeck.expansion)
+            )
+
+    def forward(self, x):
+        return nn.ReLU(inplace=True)(self.residual_function(x) + self.shortcut(x))
+
+
+class NestedUResnet(nn.Module):
+    def __init__(self, block=BottleNeck, layers=[3,4,6,3], num_classes=3, input_channels=3, deep_supervision=True):
+        super().__init__()
+
+        nb_filter = [64, 128, 256, 512, 1024]
+        self.in_channels = nb_filter[0]
+        self.relu = nn.ReLU()
+        self.deep_supervision = deep_supervision
+
+        self.pool = nn.MaxPool2d(2, 2)
+        self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+
+        self.conv0_0 = VGGBlock(input_channels, nb_filter[0], nb_filter[0])
+        self.conv1_0 = self._make_layer(block, nb_filter[1], layers[0], 1)
+        self.conv2_0 = self._make_layer(block, nb_filter[2], layers[1], 1)
+        self.conv3_0 = self._make_layer(block, nb_filter[3], layers[2], 1)
+        self.conv4_0 = self._make_layer(block, nb_filter[4], layers[3], 1)
+
+        self.conv0_1 = VGGBlock(nb_filter[0] + nb_filter[1] * block.expansion, nb_filter[0], nb_filter[0])
+        self.conv1_1 = VGGBlock((nb_filter[1] + nb_filter[2]) * block.expansion, nb_filter[1],
+                                nb_filter[1] * block.expansion)
+        self.conv2_1 = VGGBlock((nb_filter[2] + nb_filter[3]) * block.expansion, nb_filter[2],
+                                nb_filter[2] * block.expansion)
+        self.conv3_1 = VGGBlock((nb_filter[3] + nb_filter[4]) * block.expansion, nb_filter[3],
+                                nb_filter[3] * block.expansion)
+
+        self.conv0_2 = VGGBlock(nb_filter[0] * 2 + nb_filter[1] * block.expansion, nb_filter[0], nb_filter[0])
+        self.conv1_2 = VGGBlock((nb_filter[1] * 2 + nb_filter[2]) * block.expansion, nb_filter[1],
+                                nb_filter[1] * block.expansion)
+        self.conv2_2 = VGGBlock((nb_filter[2] * 2 + nb_filter[3]) * block.expansion, nb_filter[2],
+                                nb_filter[2] * block.expansion)
+
+        self.conv0_3 = VGGBlock(nb_filter[0] * 3 + nb_filter[1] * block.expansion, nb_filter[0], nb_filter[0])
+        self.conv1_3 = VGGBlock((nb_filter[1] * 3 + nb_filter[2]) * block.expansion, nb_filter[1],
+                                nb_filter[1] * block.expansion)
+
+        self.conv0_4 = VGGBlock(nb_filter[0] * 4 + nb_filter[1] * block.expansion, nb_filter[0], nb_filter[0])
+        self.sigmoid = nn.Sigmoid()
+
+        if self.deep_supervision:
+            self.final1 = nn.Conv2d(nb_filter[0], num_classes, kernel_size=1)
+            self.final2 = nn.Conv2d(nb_filter[0], num_classes, kernel_size=1)
+            self.final3 = nn.Conv2d(nb_filter[0], num_classes, kernel_size=1)
+            self.final4 = nn.Conv2d(nb_filter[0], num_classes, kernel_size=1)
+        else:
+            self.final = nn.Conv2d(nb_filter[0], 3, kernel_size=1)
+
+    def _make_layer(self, block, middle_channels, num_blocks, stride):
+        strides = [stride] + [1] * (num_blocks - 1)
+        layers = []
+        for stride in strides:
+            layers.append(block(self.in_channels, middle_channels, stride))
+            self.in_channels = middle_channels * block.expansion
+        return nn.Sequential(*layers)
+
+
+
+    def forward(self, input):
+        input = input.cuda().half()
+        x0_0 = self.conv0_0(input)
+        x1_0 = self.conv1_0(self.pool(x0_0))
+        x0_1 = self.conv0_1(torch.cat([x0_0, self.up(x1_0)], 1))
+
+        x2_0 = self.conv2_0(self.pool(x1_0))
+        x1_1 = self.conv1_1(torch.cat([x1_0, self.up(x2_0)], 1))
+        x0_2 = self.conv0_2(torch.cat([x0_0, x0_1, self.up(x1_1)], 1))
+
+        x3_0 = self.conv3_0(self.pool(x2_0))
+        x2_1 = self.conv2_1(torch.cat([x2_0, self.up(x3_0)], 1))
+        x1_2 = self.conv1_2(torch.cat([x1_0, x1_1, self.up(x2_1)], 1))
+        x0_3 = self.conv0_3(torch.cat([x0_0, x0_1, x0_2, self.up(x1_2)], 1))
+        x4_0 = self.conv4_0(self.pool(x3_0))
+        x3_1 = self.conv3_1(torch.cat([x3_0, self.up(x4_0)], 1))
+
+        x2_2 = self.conv2_2(torch.cat([x2_0, x2_1, self.up(x3_1)], 1))
+        x1_3 = self.conv1_3(torch.cat([x1_0, x1_1, x1_2, self.up(x2_2)], 1))
+        x0_4 = self.conv0_4(torch.cat([x0_0, x0_1, x0_2, x0_3, self.up(x1_3)], 1))
+
+        if self.deep_supervision:
+            output1 = self.final1(x0_1)
+            output1 = self.sigmoid(output1)
+            output2 = self.final2(x0_2)
+            output2 = self.sigmoid(output2)
+            output3 = self.final3(x0_3)
+            output4 = self.final4(x0_4)
+            output3 = self.sigmoid(output3)
+            output4 = self.sigmoid(output4)
+            
+            return output1
+
+        else:
+            output = self.final(x0_4)
+            output = self.sigmoid(output)
+            output = normal((output))
+            return output
+
+
+
+if __name__ == '__main__':
+    #tensorboard --logdir logs_model
+    net = NestedUResnet()
+    # writer = SummaryWriter("logs_model")
+    # input = torch.ones((1,3, 512, 512))
+    # # writer.add_graph(net, input)
+    # input = net(input)
+    # writer.close()
+    # print(input.shape)
+    from PIL import Image
+    import torch
+    from torchvision import transforms
+
+    # 读入图像
+    # image_path = "test_set/face.jpg"
+    # image = Image.open(image_path)
+
+    # 定义转换操作，包括缩放、标准化等
+    transform = transforms.Compose([
+        transforms.Resize((512, 512)),  # 调整图像大小
+        transforms.ToTensor(),  # 将图像转为张量
+    ])
+
+    # 应用转换
+    # tensor_image = transform(image)
+    # tensor_4d = torch.unsqueeze(tensor_image, dim=0)
+    z = torch.rand(1, 3, 256, 256)
+    # # 打印张量的形状
+    # print(tensor_4d.shape)
+    z = net(z)
+
+
+    #
+    #
+    def graph(x, var_name):
+        # 假设 result_tensor 包含图像数据，形状为 [batch_size, num_channels, height, width]
+        result_tensor = x  # 你的图像张量
+        result_tensor = result_tensor.squeeze(0)
+
+        # 将张量转换为 PIL 图像
+        tensor_to_pil = transforms.ToPILImage()
+        image = tensor_to_pil(result_tensor)  # 假设 batch_size=1，取第一个图像
+
+        # 保存图像到文件，包含变量名
+        image.save(f"./model_output/{var_name}_image.jpg")
+
+
+    # graph(z, "resnet_unetplusplus3")
+    print('z.shape',z.shape)
