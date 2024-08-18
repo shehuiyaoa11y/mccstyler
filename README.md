@@ -5,7 +5,7 @@ Multi-channel Correlated Diffusion for Text-Driven Artistic Style Transfer
 
 
 
-![MAIN3_e2-min](https://github.com/haha-lisa/Diffstyler/blob/main/figure/teaser2.jpg)
+![MAIN3_e2-min](https://github.com/899999000/mccstyler/blob/main/Fig.%2010.pdf)
 
 
 ## Abstract
