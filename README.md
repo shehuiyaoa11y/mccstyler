@@ -5,7 +5,7 @@ Multi-channel Correlated Diffusion for Text-Driven Artistic Style Transfer
 
 
 
-![MAIN3_e2-min](https://github.com/899999000/mccstyler/blob/main/Fig.%2010.pdf)
+![MAIN3_e2-min](https://github.com/899999000/mccstyler/blob/main/graph9.jpg)
 
 
 ## Abstract
@@ -32,7 +32,7 @@ pip install -r requirements.txt
 
 ## Run
 ```
-python main.py "dog.jpg" "An oil painting of a dog in impressionism style." --output "test_dog.png" -fs 0.8 -ws 0.2 -lc 3 --steps 50
+python main.py "./forest.jpg" "This is a painting of a forest in the style of cubism and futurism drawn by David Burliuk" --output "./test5/forest_test.jpg" -fs 0.8 -ws 0.2 -lc 3 --steps 200
 ```
 
 
