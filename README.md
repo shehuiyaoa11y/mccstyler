@@ -32,7 +32,7 @@ pip install -r requirements.txt
 
 ## Run
 ```
-python main.py "./forest.jpg" "This is a painting of a forest in the style of cubism and futurism drawn by David Burliuk" --output "./test5/forest_test.jpg" -fs 0.8 -ws 0.2 -lc 3 --steps 200
+python main.py "./forest10.jpg" "A monet styler painting of tree" --output "./test/forest_test.jpg" -fs 0.8 -ws 0.2 -lc 3 --steps 200
 ```
 
 
