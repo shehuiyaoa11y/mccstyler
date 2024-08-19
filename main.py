@@ -22,7 +22,7 @@ from diffusion import get_model, get_models, sampling, utils
 
 import net
 from packaging import version
-import StyleNet
+#import StyleNet
 
 import globalloss
 
@@ -36,7 +36,7 @@ import torch
 import torch.nn.functional as F
 import clip
 from template import imagenet_templates
-import StyleNet
+#import StyleNet
 from torchvision import transforms, models
 
 
