@@ -438,19 +438,7 @@ def main():
     weights1 /= weights1.sum().abs()  # weights1是tensor([1.], device='cuda:0')
 
 
-    model1 = get_model(args.model1)()
-
-    _, side_y, side_x = model1.shape
-
-    checkpoint1 = args.checkpoint1
-    if not checkpoint1:
-        checkpoint1 = MODULE_DIR / f'checkpoints/{args.model1}.pth'
-    model1.load_state_dict(torch.load(checkpoint1, map_location='cpu'))
-
-    if device.type == 'cuda':
-        model1 = model1.half()
-    model1 = model1.to(device).eval().requires_grad_(False)
-
+   
     make_cutouts = MakeCutouts(clip_model.visual.input_resolution, args.cutn, args.cut_pow)
 
     aesthetic_model_16 = torch.nn.Linear(512,1).cuda()
